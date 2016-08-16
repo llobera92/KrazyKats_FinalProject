@@ -1,0 +1,890 @@
+// KrazyKats_FinalProject.cpp : Defines the entry point for the console application.
+//
+
+#include "stdafx.h"
+#include <iostream>
+#include <vector>
+#include <cstdlib>
+#include <ctime>
+#include <conio.h>
+#include <queue>
+
+using namespace std;
+const int ROW = 15;
+const int COL = 30;
+const char KATSYMB = 228;
+const char HUNSYMB = 234;
+const int NUMACTIONS = 2;
+const char EMPTYSYMB = 176;		//when checking IfAvailable
+int PURRSCOOLDOWN = 0;
+enum eKatAction {K_ENDTURN = 0, K_UP, K_LEFT, K_DOWN, K_RIGHT, K_UPLEFT, K_UPRIGHT,
+	K_DOWNLEFT, K_DOWNRIGHT};
+enum eHunterAction {ENDTURN = 112, UP = 119, LEFT=97, DOWN=115, RIGHT=100, UPLEFT=113, UPRIGHT=101,
+	DOWNLEFT=122, DOWNRIGHT=99, GLASSES=114, EARMUFFHAPPY=116};
+
+class Point {
+private:
+	int x, y;
+public:
+	Point(int inputX = 0, int inputY = 0)
+	{
+		x = inputX;
+		y = inputY;
+	}
+	int getX() { return x; }
+	int getY() { return y; }
+	void setX(int newX) { x = newX; }
+	void setY(int newY) { y = newY; }
+
+};
+struct Kat
+{
+	Point myPos;
+	bool isStupid;		
+	Kat()
+	{
+
+	}
+	Kat(bool stupidity)
+	{
+		myPos.setX(rand() % (ROW - 2) + 1);
+		myPos.setY(rand() % (COL - 2) + 1);
+		isStupid = stupidity;
+	}
+};
+struct Hunter
+{
+	Point myPos;
+	int tunaCans;
+	bool isStunned;
+	bool reflectiveGlassesSpell;
+	bool earmuffOfHappinessSpell;
+	Hunter()
+	{
+		myPos.setX(rand() % (ROW - 2) + 1);
+		myPos.setY(rand() % (COL - 2) + 1);
+		tunaCans = 5;
+		isStunned = false;
+		reflectiveGlassesSpell = false;
+		earmuffOfHappinessSpell = false;
+	}
+};
+struct Board
+{
+	char map[ROW][COL];
+	bool gameOver;
+	vector<Kat> aliveKats;
+	Hunter hunter;
+	Board()
+	{
+		gameOver = false;
+	}
+};
+
+//Map prototype area
+eHunterAction KeyboardInput();
+void FillBoard(Board&);
+void DisplayBoard(Board&);
+void InitializeGame(Board&);
+void DrawPlayers(Board&, Hunter, vector<Kat>);
+void GameEngine(Board&);
+bool IsAvailable(Board, Point);
+
+//Hunter prototype are
+Hunter HunterKreator(Board&);
+void HunterTurn(Board&);
+queue<Kat> KatNearby(Board, Point, int);
+void HunterNonAttackAction(Board&);
+bool HunterAttack(Board&, Kat);
+void RemoveKat(Board&, Kat);
+
+//Kat prototype are
+Kat KatKreator(bool, Board&);
+void KatsTurn(Board&);
+bool hunterNearby(Board, Kat, int&);
+void StupidKatActtion(Board&, Kat, int);
+void SmartKatAction(Board&, Kat, int);
+void KatEyesOfSub(Board&);
+void PurrsOfDoom(Board&);
+eKatAction KatMoveEngine(Board, Point);
+void KatNonAttackAction(Board&, Kat, int);
+
+#pragma region Game Logic Functions
+//Done
+eHunterAction KeyboardInput()
+{
+	char keyInput;
+	cin >> keyInput;
+	
+	switch (keyInput)
+	{
+	case 'f':
+		return ENDTURN;
+		break;
+	case 'w':
+		return UP;
+		break;
+	case 'a':
+		return LEFT;
+		break;
+	case 's':
+		return DOWN;
+		break;
+	case 'd':
+		return RIGHT;
+		break;
+	case 'q':
+		return UPLEFT;
+		break;
+	case 'e':
+		return UPRIGHT;
+		break;
+	case 'z':
+		return DOWNLEFT;
+		break;
+	case 'c':
+		return DOWNRIGHT;
+		break;
+	case 'r':
+		return GLASSES;
+		break;
+	case 't':
+		return EARMUFFHAPPY;
+		break;
+	default:
+		break;
+	}
+}
+//Done
+void FillBoard(Board& board)	//Done
+{
+	for (int i = 0; i < ROW; i++)
+	{
+		for (int j = 0; j < COL; j++)
+		{
+			if (i == 0 || i == ROW - 1)
+			{
+				board.map[i][j] = 205;
+			}
+			else if (j == 0 || j == COL - 1)
+			{
+				board.map[i][j] = 186;
+			}
+			else
+			{
+				board.map[i][j] = EMPTYSYMB;
+			}
+		}
+	}
+
+	board.map[0][0] = 201;
+	board.map[ROW - 1][0] = 200;
+	board.map[0][COL - 1] = 187;
+	board.map[ROW - 1][COL - 1] = 188;
+}
+//Done
+void DisplayBoard(Board& board)		//Done
+{
+	system("cls");
+	for (int i = 0; i < ROW; i++)
+	{
+		for (int j = 0; j < COL; j++)
+		{
+			cout << board.map[i][j];
+		}
+		cout << endl;
+	}
+	cout << "Hunter tuna cans remaining: " << board.hunter.tunaCans << endl;
+	cout << "Number of Kat still in the town: " << board.aliveKats.size() << endl;
+}
+//Done
+void InitializeGame(Board& board)	//Done
+{
+	//Working in creation of player
+	int smartKats;
+	int stupidKats;
+	//int katIndex = -1;
+	Kat newKat;
+	cout << "How many Smarts Kats you want to kill: ";
+	cin >> smartKats;
+	cout << "How many Stupid Kats you want to kill: ";
+	cin >> stupidKats;
+	Hunter newHunter = HunterKreator(board);
+	board.hunter = newHunter;
+	for (int i = 0; i < smartKats; i++)
+	{
+		newKat = KatKreator(false, board);
+		//katIndex++;
+		//newKat.katIndex = katIndex;
+		board.aliveKats.push_back(newKat);
+	}
+	for (int i = 0; i < stupidKats; i++)
+	{
+		newKat = KatKreator(true, board);
+		//katIndex++;
+		//newKat.katIndex = katIndex;
+		board.aliveKats.push_back(newKat);
+	}
+	//Drawing players in the map
+	DrawPlayers(board, newHunter, board.aliveKats);
+}
+//Done
+void DrawPlayers(Board& board, Hunter newHunter, vector<Kat> aliveKats)		//Done
+{
+	Point hunterPoint(newHunter.myPos.getX(), newHunter.myPos.getY());
+	if (IsAvailable(board, hunterPoint))
+	{
+		board.map[newHunter.myPos.getX()][newHunter.myPos.getY()] = 234;
+	}
+	for (int i = 0; i < aliveKats.size(); i++)
+	{
+		Kat currentKat = aliveKats[i];
+		Point katPoint(currentKat.myPos.getX(), currentKat.myPos.getY());
+
+		if (IsAvailable(board, katPoint))
+		{
+			board.map[currentKat.myPos.getX()][currentKat.myPos.getY()] = 228;
+		}
+	}
+}
+//Done
+bool IsAvailable(Board board, Point point)	//Done
+{
+	char currentSymb = board.map[point.getX()][point.getY()];
+	bool temp = false;
+	temp = (currentSymb == EMPTYSYMB);
+	return temp;
+}
+//Done
+void GameEngine(Board& board)
+{
+	/*Here I will iterate over turn. This fuction will be 
+	the one that triggers every turn and handles avery action
+	to be performed in the turn*/
+	Hunter currentHunter = board.hunter;
+	if (currentHunter.tunaCans > 0)
+	{
+		HunterTurn(board);
+		if (board.hunter.tunaCans <= 0) //I validate here cause the hunter can kill himself with Kat Kapture
+		{
+			board.gameOver = true;
+			cout << "Those Kats are strong. Good Try." << endl;
+		}
+	}
+	if (board.aliveKats.size() > 0)
+	{
+		KatsTurn(board);
+		if (currentHunter.tunaCans <= 0)
+		{
+			board.gameOver = true;
+			cout << "Those Kats are strong. Good Try." << endl;
+		}
+	}
+	else
+	{
+		cout << "WOW! You are a Kat Assasing. Good job." << endl;
+		board.gameOver = true;
+	}
+}
+//Done
+bool AttackSucceded(int accPercent)
+{
+	int accuracy = rand() % 100 + 1;
+	return (accuracy <= accPercent);
+}
+//Done
+bool Move(Board& board, char player,Point startPos, Point endPos)
+{
+	if (IsAvailable(board, endPos))
+	{
+		board.map[endPos.getX()][endPos.getY()] = player;
+		board.map[startPos.getX()][startPos.getY()] = EMPTYSYMB;
+		return true;
+	}
+	return false;
+}
+
+#pragma endregion
+
+#pragma region Hunter related Functions
+//Done
+Hunter HunterKreator(Board& board)
+{
+	/*This funtion will create a hunter. This hunter
+	will have random coordenates since he just get into
+	the game. Have to check is available, etc*/
+	Hunter newHunter;
+	Point newHunterPos(newHunter.myPos.getX(), newHunter.myPos.getY());
+	while (!IsAvailable(board,newHunterPos))
+	{
+		newHunterPos.setX(rand() % (ROW - 2) + 1);
+		newHunterPos.setY(rand() % (COL - 2) + 1);
+	}
+	newHunter.myPos.setX(newHunterPos.getX());
+	newHunter.myPos.setY(newHunterPos.getY());
+	board.map[newHunter.myPos.getX()][newHunter.myPos.getY()] = HUNSYMB;
+	
+	return newHunter;
+}
+//Done
+void HunterTurn(Board& board)
+{
+	/*Hunter has priority over Kats in the turn.
+	Here there is a pathern in choosing the action to perform.
+	If there is kats to attack attack them, if not, the user can move using
+	the keyboard or choosing a defensive spell*/
+	
+	Kat katToAttack;
+	int actionsCount = 0;							//Actions counter. when two actions perform, break
+//	queue<Point> katsNearby = CreatureNearby(board, currentHunter.myPos, 1, KATSYMB);	//Criatures available to attack
+	queue<Kat> katsNearby;	//Criatures available to attack
+	if (!board.hunter.isStunned)
+	{
+		while (actionsCount < NUMACTIONS)
+		{	
+			katsNearby = KatNearby(board, board.hunter.myPos, 1);
+			if (!katsNearby.empty())
+			{
+				katToAttack = katsNearby.front();
+				if (HunterAttack(board, katToAttack))
+				{
+					katsNearby.pop();
+					if (board.aliveKats.empty()) return;
+				}
+				actionsCount++;
+			}
+			else
+			{
+				HunterNonAttackAction(board);				//Have to implement it.
+				actionsCount++;
+			}
+			DisplayBoard(board);
+		}
+		PURRSCOOLDOWN++;
+	}
+	else
+	{
+		cout << "Hunter stunned for one turn" << endl;
+		board.hunter.isStunned = false;
+	}
+		cout << "Hunter turn ended" << endl;
+}
+//Done
+queue<Kat> KatNearby(Board board, Point refPoint, int squaresAway)
+{
+	//Have to check every neightbor to see if there is a Kat to attack
+	//I think I will use a secundary method to use it with kats as well.
+	queue<Kat> katsNearby;
+	Kat tempKat;
+	int x = refPoint.getX();
+	int y = refPoint.getY();
+
+	for (int i = 0; i < board.aliveKats.size(); i++)
+	{
+		tempKat = board.aliveKats[i];
+		if (x > 0 && y > 0)
+		{
+			if ((x - squaresAway) == tempKat.myPos.getX() && (y - squaresAway) == tempKat.myPos.getY())
+			{
+				katsNearby.push(tempKat);
+			}
+
+		}
+		if (x > 0 && y < COL)
+		{
+			if ((x - squaresAway) == tempKat.myPos.getX() && (y + squaresAway) == tempKat.myPos.getY())
+			{
+				katsNearby.push(tempKat);
+			}
+		}
+		if (x < ROW && y > 0)
+		{
+			if ((x + squaresAway) == tempKat.myPos.getX() && (y - squaresAway) == tempKat.myPos.getY())
+			{
+				katsNearby.push(tempKat);
+			}
+		}
+		if (x < ROW && y < COL)
+		{
+			if ((x - squaresAway) == tempKat.myPos.getX() && (y - squaresAway) == tempKat.myPos.getY())
+			{
+				katsNearby.push(tempKat);
+			}
+		}
+		if (x > 0)
+		{
+			if ((x - squaresAway) == tempKat.myPos.getX() && (y) == tempKat.myPos.getY())
+			{
+				katsNearby.push(tempKat);
+			}
+		}
+		if (x < ROW)
+		{
+			if ((x + squaresAway) == tempKat.myPos.getX() && (y) == tempKat.myPos.getY())
+			{
+				katsNearby.push(tempKat);
+			}
+		}
+		if (y > 0)
+		{
+			if ((x) == tempKat.myPos.getX() && (y - squaresAway) == tempKat.myPos.getY())
+			{
+				katsNearby.push(tempKat);
+			}
+		}
+		if (y < COL)
+		{
+			if ((x) == tempKat.myPos.getX() && (y + squaresAway) == tempKat.myPos.getY())
+			{
+				katsNearby.push(tempKat);
+			}
+		}
+	}
+	return katsNearby;
+}
+//Done
+void HunterNonAttackAction(Board& board)
+{
+	eHunterAction nextAccion;
+	Point newPoint;
+	bool canMove = false;
+	int hunterX = board.hunter.myPos.getX();
+	int hunterY = board.hunter.myPos.getY();
+	newPoint.setX(hunterX);
+	newPoint.setY(hunterY);
+	do
+	{
+		nextAccion = KeyboardInput();
+		switch (nextAccion)
+		{
+		case ENDTURN:
+			canMove = true;
+			break;
+		case UP:
+			newPoint.setX(hunterX - 1);
+			newPoint.setY(hunterY);
+			break;
+		case LEFT:
+			newPoint.setX(hunterX);
+			newPoint.setY(hunterY - 1);
+			break;
+		case DOWN:
+			newPoint.setX(hunterX + 1);
+			newPoint.setY(hunterY);
+			break;
+		case RIGHT:
+			newPoint.setX(hunterX);
+			newPoint.setY(hunterY + 1);
+			break;
+		case UPLEFT:
+			newPoint.setX(hunterX - 1);
+			newPoint.setY(hunterY - 1);
+			break;
+		case UPRIGHT:
+			newPoint.setX(hunterX - 1);
+			newPoint.setY(hunterY + 1);
+			break;
+		case DOWNLEFT:
+			newPoint.setX(hunterX + 1);
+			newPoint.setY(hunterY - 1);
+			break;
+		case DOWNRIGHT:
+			newPoint.setX(hunterX + 1);
+			newPoint.setY(hunterY + 1);
+			break;
+		case GLASSES:
+			board.hunter.reflectiveGlassesSpell = true;
+			canMove = true;
+			cout << "Hunter cast Reflective Glasses spell" << endl;
+			break;
+		case EARMUFFHAPPY:
+			board.hunter.earmuffOfHappinessSpell = true;
+			canMove = true;
+			cout << "Hunter cast Earmuff of Happiness spell" << endl;
+			break;
+		default:
+			break;
+		}
+		if (Move(board, HUNSYMB, board.hunter.myPos, newPoint))	canMove = true;
+		else cout << "I am sorry you can't move to that spot." << endl;
+
+	}while (!canMove);
+
+	board.hunter.myPos.setX(newPoint.getX());
+	board.hunter.myPos.setY(newPoint.getY());
+}
+//Done
+bool HunterAttack(Board& board, Kat enemy)
+{
+	const int KATKAPT = 75;
+	const int UNOPENTUNA = 10;
+	const int AUTOKAPT = 1;
+
+	if (AttackSucceded(KATKAPT))
+	{
+		board.map[enemy.myPos.getX()][enemy.myPos.getY()] = EMPTYSYMB;
+		RemoveKat(board, enemy);
+		if (AttackSucceded(UNOPENTUNA))
+		{
+			board.hunter.tunaCans++;
+		}
+		return true;
+	}
+	else if (AttackSucceded(AUTOKAPT))  //Here should end the game cuz the hunter kaptured himself
+	{									//NOT sure if it will work cuz board is not passed by reference
+		board.gameOver = true;
+		board.hunter.tunaCans = 0;
+	}
+	return false;
+}
+
+void RemoveKat(Board& board, Kat kat)
+{
+	vector<Kat> aliveKats = board.aliveKats;
+	for (int i = 0; i < aliveKats.size(); i++)
+	{
+		if (aliveKats[i].myPos.getX() == kat.myPos.getX() && aliveKats[i].myPos.getY() == kat.myPos.getY())
+			board.aliveKats.erase(board.aliveKats.begin() +i);
+	}
+}
+
+#pragma endregion
+
+#pragma region Kat related Functions
+//Done
+Kat KatKreator(bool stupidity, Board& board)
+{
+	/*This funtion will create a kat. This kat
+	will have random coordenates since he just get into
+	the game. Have to check is available, etc*/
+	Kat newKat(stupidity);
+	Point newKatPos(newKat.myPos.getX(), newKat.myPos.getY());
+	while (!IsAvailable(board, newKatPos))
+	{
+		newKatPos.setX(rand() % (ROW - 2) + 1);
+		newKatPos.setY(rand() % (COL - 2) + 1);
+	}
+	newKat.myPos.setX(newKatPos.getX());
+	newKat.myPos.setY(newKatPos.getY());
+	board.map[newKat.myPos.getX()][newKat.myPos.getY()] = KATSYMB;
+	return newKat;
+}
+//Done
+void KatsTurn(Board& board)
+{
+	Hunter hunter;  //I think I dont need this
+	int innerRand;
+	bool isStunned;
+	int distance;
+	for (int i = 0; i < board.aliveKats.size(); i++)
+	{
+		if (board.aliveKats[i].isStupid)
+		{
+			for (int j = 0; j < NUMACTIONS; j++)
+			{
+				StupidKatActtion(board, board.aliveKats[i], i);
+				DisplayBoard(board);
+			}
+		}
+		else
+		{
+			for (int j = 0; j < NUMACTIONS; j++)
+			{
+				SmartKatAction(board, board.aliveKats[i], i);
+				DisplayBoard(board);
+			}
+		}
+		if(board.hunter.tunaCans <= 0) return;
+	}
+}
+//Done
+bool hunterNearby(Board board, Kat currentKat,int& squaresAway)
+{
+	/*Here I will a have to return hunter if it is close based on a distance I will have as
+	a parameter*/
+
+	//Have to check every neightbor to see if there is a Kat to attack
+	//I think I will use a secundary method to use it with kats as well.
+	Hunter hunter;
+	int katX = currentKat.myPos.getX();
+	int katY = currentKat.myPos.getY();
+	int hunterX = board.hunter.myPos.getX();
+	int hunterY = board.hunter.myPos.getY();
+
+	for (int i = 1; i <= 2; i++)
+	{
+		if ((katX - i) > 0 && (katY - i) > 0)
+		{
+			if ((katX - i) == hunterX && (katY - i) == hunterY)
+			{
+				squaresAway = i;
+				return true;
+			}
+
+		}
+		if ((katX - i) > 0 && (katY + i) < COL)
+		{
+			if ((katX - i) == hunterX && (katY + i) == hunterY)
+			{
+				squaresAway = i;
+				return true;
+			}
+
+		}
+		if ((katX + i) < ROW && (katY - i) > 0)
+		{
+			if ((katX + i) == hunterX && (katY - i) == hunterY)
+			{
+				squaresAway = i;
+				return true;
+			}
+
+		}
+		if ((katX + i) < ROW && (katY + i) < COL)
+		{
+			if ((katX + i) == hunterX && (katY + i) == hunterY)
+			{
+				squaresAway = i;
+				return true;
+			}
+
+		}
+		if ((katX - i) > 0)
+		{
+			if ((katX - i) == hunterX && katY == hunterY)
+			{
+				squaresAway = i;
+				return true;
+			}
+
+		}
+		if ((katX + i) < ROW)
+		{
+			if ((katX + i) == hunterX && katY == hunterY)
+			{
+				squaresAway = i;
+				return true;
+			}
+
+		}
+		if ((katY - i) > 0)
+		{
+			if (katX == hunterX && (katY - i) == hunterY)
+			{
+				squaresAway = i;
+				return true;
+			}
+
+		}
+		if (katX && (katY + i) < COL)
+		{
+			if (katX == hunterX && (katY + i) == hunterY)
+			{
+				squaresAway = i;
+				return true;
+			}
+
+		}
+	}
+	return false;
+}
+//Done
+void StupidKatActtion(Board& board, Kat stupidKat, int katIndex)
+{
+	int innerRand = rand() % 2;
+	int squaresAway;
+	if (innerRand == 1 && hunterNearby(board, stupidKat, squaresAway))
+	{
+		innerRand = rand() % 2;
+		if (!(board.hunter.isStunned) && innerRand == 1 && squaresAway <= 2 && PURRSCOOLDOWN == 2)
+			PurrsOfDoom(board);
+		else if (board.hunter.isStunned && innerRand == 2 && squaresAway == 1)
+			KatEyesOfSub(board);
+	}
+	else
+	{
+		KatNonAttackAction(board, stupidKat, katIndex);
+	}
+}
+//Done
+void SmartKatAction(Board& board, Kat smartKat, int katIndex)
+{
+	bool isStunned;
+	int squaresAway;
+	if (hunterNearby(board, smartKat, squaresAway))
+	{
+		if (!(board.hunter.isStunned) && PURRSCOOLDOWN == 2)
+			PurrsOfDoom(board);
+		else if (squaresAway == 1)
+			KatEyesOfSub(board);
+		else
+			KatNonAttackAction(board, smartKat, katIndex);
+	}
+	else
+	{
+		KatNonAttackAction(board, smartKat, katIndex);
+	}
+}
+//Done
+void KatEyesOfSub(Board& board)
+{
+	int eyesSub;
+	if(board.hunter.reflectiveGlassesSpell)
+		eyesSub = 30;
+	eyesSub = 60;
+
+	if (AttackSucceded(eyesSub))
+	{
+		board.hunter.tunaCans--;
+	}
+}
+//Done
+void PurrsOfDoom(Board& board)
+{
+	int puursDoom;
+	if (board.hunter.earmuffOfHappinessSpell)
+		puursDoom = 40;
+	puursDoom = 80;
+
+	if (AttackSucceded(puursDoom))
+	{
+		board.hunter.isStunned = true;
+		cout << "Kat stunned you with Puurs of Doom" << endl;
+		PURRSCOOLDOWN = 0;
+	}
+}
+//Done
+eKatAction KatMoveEngine(Board board, Point katPos, int katIndex)	//Done
+{
+	int katX = katPos.getX();
+	int katY = katPos.getY();
+	int hunterX = board.hunter.myPos.getX();
+	int hunterY = board.hunter.myPos.getY();
+	Point newPoint;
+
+	if (hunterX < katX && hunterY < katY)
+	{
+		newPoint.setX(katX - 1);
+		newPoint.setY(katY - 1);
+		if(IsAvailable(board, newPoint))return K_UPLEFT;
+	}
+	else if (hunterX > katX && hunterY < katY)
+	{
+		newPoint.setX(katX + 1);
+		newPoint.setY(katY - 1);
+		if (IsAvailable(board, newPoint))return K_DOWNLEFT;
+	}
+	else if (hunterX > katX && hunterY > katY)
+	{
+		newPoint.setX(katX + 1);
+		newPoint.setY(katY + 1);
+		if (IsAvailable(board, newPoint))return K_DOWNRIGHT;
+	}
+	else if (hunterX < katX && hunterY > katY)
+	{
+		newPoint.setX(katX - 1);
+		newPoint.setY(katY + 1);
+		if (IsAvailable(board, newPoint))return K_UPRIGHT;
+	}
+	else if (hunterX < katX && hunterY == katY)
+	{
+		newPoint.setX(katX - 1);
+		newPoint.setY(katY);
+		if (IsAvailable(board, newPoint))return K_UP;
+	}
+	else if (hunterX == katX && hunterY < katY)
+	{
+		newPoint.setX(katX);
+		newPoint.setY(katY - 1);
+		if (IsAvailable(board, newPoint))return K_LEFT;
+	}
+	else if (hunterX > katX && hunterY == katY)
+	{
+		newPoint.setX(katX + 1);
+		newPoint.setY(katY);
+		if (IsAvailable(board, newPoint))return K_DOWN;
+	}
+	else if (hunterX == katX && hunterY > katY)
+	{
+		newPoint.setX(katX);
+		newPoint.setY(katY + 1);
+		if (IsAvailable(board, newPoint))return K_RIGHT;
+	}
+	return K_ENDTURN;
+}
+
+void KatNonAttackAction(Board& board, Kat kat, int katIndex)
+{
+	eKatAction nextAction;
+	bool canMove = false;
+	int katX = kat.myPos.getX();
+	int katY = kat.myPos.getY();
+	Point newPoint(katX, katY);
+	do
+	{
+		if(!kat.isStupid) nextAction = KatMoveEngine(board, kat.myPos, katIndex);
+		else nextAction = static_cast<eKatAction>(rand() % 8 + 1);
+		switch (nextAction)
+		{
+
+		case K_ENDTURN:
+			canMove = true;
+			break;
+		case K_UP:
+			newPoint.setX(katX - 1);
+			newPoint.setY(katY);
+			break;
+		case K_LEFT:
+			newPoint.setX(katX);
+			newPoint.setY(katY - 1);
+			break;
+		case K_DOWN:
+			newPoint.setX(katX + 1);
+			newPoint.setY(katY);
+			break;
+		case K_RIGHT:
+			newPoint.setX(katX);
+			newPoint.setY(katY + 1);
+			break;
+		case K_UPLEFT:
+			newPoint.setX(katX - 1);
+			newPoint.setY(katY - 1);
+			break;
+		case K_UPRIGHT:
+			newPoint.setX(katX - 1);
+			newPoint.setY(katY + 1);
+			break;
+		case K_DOWNLEFT:
+			newPoint.setX(katX + 1);
+			newPoint.setY(katY - 1);
+			break;
+		case K_DOWNRIGHT:
+			newPoint.setX(katX + 1);
+			newPoint.setY(katY + 1);
+			break;
+		default:
+			break;
+		}
+		if(!canMove)
+			canMove = Move(board, KATSYMB, kat.myPos, newPoint);	
+	} while (!canMove);
+	board.aliveKats[katIndex].myPos.setX(newPoint.getX());
+	board.aliveKats[katIndex].myPos.setY(newPoint.getY());
+}
+
+#pragma endregion
+
+int main()
+{
+	srand(time(0));
+	Board gameBoard;
+	FillBoard(gameBoard);
+	InitializeGame(gameBoard);
+	DisplayBoard(gameBoard);
+	while (!gameBoard.gameOver)
+	{
+		GameEngine(gameBoard);
+		DisplayBoard(gameBoard);
+	}
+    return 0;
+}
